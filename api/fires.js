@@ -1,24 +1,33 @@
 export default async function handler(req, res) {
   try {
-    const MAP_KEY = process.env.FIRMS_MAP_KEY;
+    const mapKey = process.env.FIRMS_MAP_KEY;
 
-    const url =
-      `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${MAP_KEY}/VIIRS_NOAA21_NRT/6.90,36.85,7.00,36.95/1`;
+    if (!mapKey) {
+      return res.status(500).json({
+        error: "FIRMS_MAP_KEY is not configured"
+      });
+    }
 
-    const response = await fetch(url);
+    const nasaUrl =
+      `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${mapKey}/VIIRS_NOAA21_NRT/6.90,36.85,7.00,36.95/1`;
+
+    const response = await fetch(nasaUrl);
 
     if (!response.ok) {
       return res.status(response.status).json({
-        error: "NASA FIRMS request failed"
+        error: "NASA FIRMS request failed",
+        status: response.status
       });
     }
 
     const csv = await response.text();
 
-    const lines = csv.trim().split("\n");
+    const lines = csv.trim().split(/\r?\n/);
 
-    if (lines.length < 2) {
-      return res.status(200).json({ fires: [] });
+    if (lines.length <= 1) {
+      return res.status(200).json({
+        fires: []
+      });
     }
 
     const headers = lines[0].split(",");
@@ -26,18 +35,18 @@ export default async function handler(req, res) {
     const fires = lines.slice(1).map(line => {
       const values = line.split(",");
 
-      const fire = {};
+      const row = {};
 
       headers.forEach((header, index) => {
-        fire[header.trim()] = values[index]?.trim() || null;
+        row[header.trim()] = values[index]?.trim() ?? null;
       });
 
       return {
-        latitude: Number(fire.latitude),
-        longitude: Number(fire.longitude),
-        confidence: fire.confidence,
-        date: fire.acq_date,
-        time: fire.acq_time
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude),
+        confidence: row.confidence,
+        date: row.acq_date,
+        time: row.acq_time
       };
     });
 
